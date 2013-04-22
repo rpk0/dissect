@@ -11,6 +11,7 @@ require 'fileutils'
 require "dissect/empty_hash.rb"
 require "dissect/scan2.rb"
 require "dissect/errors.rb"
+require "dissect/valid_types.rb"
 
 
 
@@ -108,14 +109,6 @@ module Dissect
       end
     end
 
-    def valid_input_types
-      @valid_input  = ["email", "xml", "text"]
-    end
-
-    def valid_output_types
-      @valid_output = ["json", "xml"]
-    end
-
     def structured_parser(op, struct, str)
       out = []
       if str=~/(?<=#{op["parsing_start"]}).*?(?=#{op["parsing_end"]})/im
@@ -143,15 +136,17 @@ module Dissect
            # print ', ' unless idx == o.size - 1
          end
         end
-
         keys_arr = struct.keys
         output = Hash[keys_arr.collect { |v| [v, Dissect::EmptyHash.new(v)] }]
+        # array of arrays depending the fixed width structure
+        #
         order = @orderline.each_slice(struct.values.size).to_a
 
         final = []
         order.each do |orderl|
           final << (Hash[*output.keys.zip(orderl).flatten])
         end
+
         if final.map(&:values).flatten.empty?
           @output_stru = {:error=>"No matches"}
         else
@@ -164,37 +159,82 @@ module Dissect
       end
     end
 
-    def unstructured_parser(reg, str)
+    def unstructured_parser(op, reg, str)
 
       # create the hash output
       keys_arr = reg.keys
       output = Hash[keys_arr.collect { |v| [v, Dissect::EmptyHash.new(v)] }]
 
+      # output = []
       # take the regexes from yaml
       # accept all types of regexes -> non-capturing groups - named capturing groups - no groups
       #
       keys_arr.each do |name|
         regexp = to_regexp reg["#{name}"]
         if regexp.named_captures.values.size > 1
-          match = (str.scan2 regexp)[0].nil? ? "" : (str.scan2 regexp)[0]
+          if (str.scan2 regexp)[0].nil?
+            match = ""
+            output[name] = match
+          else
+            tmp = []
+            str.scan2(regexp).each do |mat|
+              match = mat
+              tmp << match
+              p "using scan2"
+            end
+              output[name] = tmp
+              p tmp
+          end
+          # match = (str.scan2 regexp)[0].nil? ? "" : (str.scan2 regexp)[0]
         elsif regexp.named_captures.values.size == 1
-          match = (str.scan regexp)[0].nil? ? "" : (str.scan regexp)[0][0]
+          if (str.scan regexp)[0].nil?
+            match = ""
+          else
+            tmp = []
+            str.scan(regexp) do |mat|
+              match = mat[0]
+              tmp << match
+              p "using scan"
+              # p output
+            end
+            output[name] = tmp
+
+          end
+           # match = (str.scan regexp)[0].nil? ? "" : (str.scan regexp)[0][0]
         else  #with non-named groups or no groups at all
           if (str.scan regexp)[0].kind_of?(Array)
             match = (str.scan regexp)[0].nil? ? "" : (str.scan regexp)[0].compact
             match = match[0][0] if match.size == 1
+            output[name] = match
           else
             match = str.scan regexp
+            output[name] = match
           end
         end
-        output[name] = match
+        p output
       end
-      @output_unstru = output.values.reject(&:empty?).empty? ? {:error=>"No matches"} : output
+      final = []
+      max = output.values.sort_by {|x| x.length}.reverse[0].size
+      (0..max-1).each do |i|
+        temp_h = {}
+        output.each do |hh|
+          temp_h[hh[0]] = hh[1][i].nil? ? hh[1][i-1] : hh[1][i]
+        end
+        final << temp_h
+      end
+      if final.map(&:values).flatten.empty?
+        @output_unstru = {:error=>"No matches"}
+      else
+        @output_unstru = op["multiple?"] ? Hash[op["name"],final] : final[0]
+      end
+      # @output_unstru = final #output.values.reject(&:empty?).empty? ? {:error=>"No matches"} : output
     end
 
     def result(hash, output_type)
       if output_type == "xml"
         @analyzed = to_xml(hash)
+      elsif output_type == "hash"
+        @analyzed = hash
       else
         @analyzed = hash.to_json
         # @analyzed = JSON.pretty_generate(hash)
@@ -260,7 +300,7 @@ module Dissect
         general_options = @yml_parsed["general_options"]["data_classification"]
 
         # config file options - regexes for structured data
-        options = @yml_parsed["structured"]["options"]
+        options = @yml_parsed["general_options"]
         structured_regexes  = @yml_parsed["structured"]["regexes"]
         structure = @yml_parsed["structured"]["options"]["structure"]
 
@@ -279,13 +319,13 @@ module Dissect
         if general_options == "structured"
           structured_parser options, structure, str
           if options["has_also_unstructured_data?"]
-            unstructured_parser structured_regexes, str
+            unstructured_parser options, structured_regexes, str
             @output = @output_stru.merge(@output_unstru)
           else
             @output = @output_stru
           end
         else
-          unstructured_parser unstructured_regexes, str
+          unstructured_parser options, unstructured_regexes, str
           @output = @output_unstru
         end
 
