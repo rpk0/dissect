@@ -137,7 +137,7 @@ module Dissect
          end
         end
         keys_arr = struct.keys
-        output = Hash[keys_arr.collect { |v| [v, Dissect::EmptyHash.new(v)] }]
+        output = Hash[keys_arr.collect { |v| [v, ""] }]
         # array of arrays depending the fixed width structure
         #
         order = @orderline.each_slice(struct.values.size).to_a
@@ -163,7 +163,10 @@ module Dissect
 
       # create the hash output
       keys_arr = reg.keys
-      output = Hash[keys_arr.collect { |v| [v, Dissect::EmptyHash.new(v)] }]
+      p keys_arr
+
+      output = Hash[keys_arr.collect { |v| [v, ""] }]
+      p output
 
       # output = []
       # take the regexes from yaml
