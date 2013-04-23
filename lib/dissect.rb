@@ -316,7 +316,7 @@ module Dissect
           structured_parser structured_options, general_options, structure, str
           if structured_options["has_also_unstructured_data?"]
             unstructured_parser general_options, structured_regexes, str
-            if general_options["multiple"]
+            if general_options["multiple?"]
               @output_unstru =  @output_unstru[general_options["name"]].size == 1 ? \
                 @output_unstru[general_options["name"]][0] : @output_unstru
             end
