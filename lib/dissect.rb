@@ -8,7 +8,6 @@ require 'yaml'
 require 'json'
 require 'fileutils'
 
-require "dissect/empty_hash.rb"
 require "dissect/scan2.rb"
 require "dissect/errors.rb"
 require "dissect/valid_types.rb"
@@ -109,12 +108,12 @@ module Dissect
       end
     end
 
-    def structured_parser(op, struct, str)
+    def structured_parser(up, op, struct, str)
       out = []
-      if str=~/(?<=#{op["parsing_start"]}).*?(?=#{op["parsing_end"]})/im
-        @str = str.scan(/(?<=#{op["parsing_start"]}).*?(?=#{op["parsing_end"]})/im)[0]
+      if str=~/(?<=#{up["parsing_start"]}).*?(?=#{up["parsing_end"]})/im
+        @str = str.scan(/(?<=#{up["parsing_start"]}).*?(?=#{up["parsing_end"]})/im)[0]
         @str.split("\n").each do |line|
-          line=line.ljust(op["max_line"]).gsub(/\+/, ' ') #gsub for ascii art tables
+          line=line.ljust(up["max_line"]).gsub(/\+/, ' ') #gsub for ascii art tables
           m = array_to_regexp(struct.values.map(&:to_s)).match(line).captures
           if m[0] !~ /\A\s*\z/ and m[0] !~ /\A[-*]\z/
             out << m
@@ -163,10 +162,8 @@ module Dissect
 
       # create the hash output
       keys_arr = reg.keys
-      p keys_arr
 
       output = Hash[keys_arr.collect { |v| [v, ""] }]
-      p output
 
       # output = []
       # take the regexes from yaml
@@ -183,10 +180,8 @@ module Dissect
             str.scan2(regexp).each do |mat|
               match = mat
               tmp << match
-              p "using scan2"
             end
               output[name] = tmp
-              p tmp
           end
           # match = (str.scan2 regexp)[0].nil? ? "" : (str.scan2 regexp)[0]
         elsif regexp.named_captures.values.size == 1
@@ -197,8 +192,6 @@ module Dissect
             str.scan(regexp) do |mat|
               match = mat[0]
               tmp << match
-              p "using scan"
-              # p output
             end
             output[name] = tmp
 
@@ -214,7 +207,6 @@ module Dissect
             output[name] = match
           end
         end
-        p output
       end
       final = []
       max = output.values.sort_by {|x| x.length}.reverse[0].size
@@ -300,11 +292,12 @@ module Dissect
         # puts 'input_type: '  + input_type
         # puts 'output_type: ' + output_type
 
-        general_options = @yml_parsed["general_options"]["data_classification"]
-
-        # config file options - regexes for structured data
+        general_options = @yml_parsed["general_options"]
         options = @yml_parsed["general_options"]
+
+        structured_options = @yml_parsed["structured"]["options"]
         structured_regexes  = @yml_parsed["structured"]["regexes"]
+
         structure = @yml_parsed["structured"]["options"]["structure"]
 
         # config file regexes for untructured data
@@ -319,16 +312,20 @@ module Dissect
 
         str = to_plaintext(data, input_type)
 
-        if general_options == "structured"
-          structured_parser options, structure, str
-          if options["has_also_unstructured_data?"]
-            unstructured_parser options, structured_regexes, str
+        if general_options["data_classification"] == "structured"
+          structured_parser structured_options, general_options, structure, str
+          if structured_options["has_also_unstructured_data?"]
+            unstructured_parser general_options, structured_regexes, str
+            if general_options["multiple"]
+              @output_unstru =  @output_unstru[general_options["name"]].size == 1 ? \
+                @output_unstru[general_options["name"]][0] : @output_unstru
+            end
             @output = @output_stru.merge(@output_unstru)
           else
             @output = @output_stru
           end
         else
-          unstructured_parser options, unstructured_regexes, str
+          unstructured_parser general_options, unstructured_regexes, str
           @output = @output_unstru
         end
 
