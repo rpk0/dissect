@@ -152,7 +152,7 @@ module Dissect
           @output_stru = op["multiple?"] ? Hash[op["name"],final] : final[0]
         end
       else
-        er = Error::StructureDataEr.new
+        er = Error::StructureDataErr.new
         Dissect.logger.fatal er
         raise er
       end
