@@ -1,6 +1,6 @@
 # Dissect
 
-TODO: Write a gem description
+A gem that for dissecting text files and e-mails based on a fixed set of expressions.
 
 ## Installation
 
